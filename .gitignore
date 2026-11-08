@@ -1,0 +1,13 @@
+**/target/
+.tools/
+.m2/
+.env
+**/.idea/
+**/.settings/
+**/.classpath
+**/.factorypath
+**/.project
+eclipse-lombok.ini
+**/data/
+**/mysql/data/
+*.log

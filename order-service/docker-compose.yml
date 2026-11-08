@@ -1,0 +1,9 @@
+services:
+  mysql:
+    extends:
+      file: ../docker-compose.yml
+      service: order-db
+networks:
+  commerce:
+volumes:
+  order-data:

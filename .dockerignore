@@ -1,0 +1,10 @@
+**/target
+**/.git
+**/.idea
+**/.settings
+**/data
+**/mysql
+.m2
+.tools
+.env
+*.log

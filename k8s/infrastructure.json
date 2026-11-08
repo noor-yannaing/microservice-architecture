@@ -1,0 +1,1072 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "name": "commerce"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Secret",
+      "metadata": {
+        "name": "commerce-local",
+        "namespace": "commerce"
+      },
+      "type": "Opaque",
+      "stringData": {
+        "INTERNAL_TOKEN": "local-service-token",
+        "MYSQL_ROOT_PASSWORD": "local-root-password",
+        "MONGO_INITDB_ROOT_PASSWORD": "local-mongo-password",
+        "KC_BOOTSTRAP_ADMIN_PASSWORD": "local-admin-password",
+        "MONGODB_URI": "mongodb://root:local-mongo-password@mongodb:27017/product_service?authSource=admin"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "inventory-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "inventory-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "inventory-db"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "inventory-db"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "inventory-db",
+                "image": "mysql:8.4.4",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3306
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "MYSQL_DATABASE",
+                    "value": "inventory_service"
+                  },
+                  {
+                    "name": "MYSQL_PASSWORD",
+                    "value": "inventory"
+                  },
+                  {
+                    "name": "MYSQL_ROOT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "commerce-local",
+                        "key": "MYSQL_ROOT_PASSWORD"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_USER",
+                    "value": "inventory"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/mysql"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3306
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "inventory-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "inventory-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "inventory-db"
+        },
+        "ports": [
+          {
+            "name": "tcp-3306",
+            "port": 3306,
+            "targetPort": 3306
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "kafka-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "5Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "kafka",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "kafka"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "kafka"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "kafka",
+                "image": "confluentinc/cp-kafka:7.8.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 29092
+                  },
+                  {
+                    "containerPort": 29093
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "CLUSTER_ID",
+                    "value": "MkU3OEVBNTcwNTJENDM2Qk"
+                  },
+                  {
+                    "name": "KAFKA_ADVERTISED_LISTENERS",
+                    "value": "PLAINTEXT://kafka:29092"
+                  },
+                  {
+                    "name": "KAFKA_AUTO_CREATE_TOPICS_ENABLE",
+                    "value": "true"
+                  },
+                  {
+                    "name": "KAFKA_CONTROLLER_LISTENER_NAMES",
+                    "value": "CONTROLLER"
+                  },
+                  {
+                    "name": "KAFKA_CONTROLLER_QUORUM_VOTERS",
+                    "value": "1@kafka:29093"
+                  },
+                  {
+                    "name": "KAFKA_INTER_BROKER_LISTENER_NAME",
+                    "value": "PLAINTEXT"
+                  },
+                  {
+                    "name": "KAFKA_LISTENERS",
+                    "value": "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093"
+                  },
+                  {
+                    "name": "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP",
+                    "value": "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT"
+                  },
+                  {
+                    "name": "KAFKA_NODE_ID",
+                    "value": "1"
+                  },
+                  {
+                    "name": "KAFKA_NUM_PARTITIONS",
+                    "value": "3"
+                  },
+                  {
+                    "name": "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR",
+                    "value": "1"
+                  },
+                  {
+                    "name": "KAFKA_PROCESS_ROLES",
+                    "value": "broker,controller"
+                  },
+                  {
+                    "name": "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR",
+                    "value": "1"
+                  },
+                  {
+                    "name": "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR",
+                    "value": "1"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "2Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/kafka/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 29092
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "kafka-data"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 1000
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "kafka",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "kafka"
+        },
+        "ports": [
+          {
+            "name": "tcp-29092",
+            "port": 29092,
+            "targetPort": 29092
+          },
+          {
+            "name": "tcp-29093",
+            "port": 29093,
+            "targetPort": 29093
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "commerce-realm",
+        "namespace": "commerce"
+      },
+      "data": {
+        "commerce-realm.json": "{\n  \"realm\": \"commerce\",\n  \"enabled\": true,\n  \"roles\": {\n    \"realm\": [\n      {\n        \"name\": \"admin\"\n      },\n      {\n        \"name\": \"customer\"\n      }\n    ]\n  },\n  \"clients\": [\n    {\n      \"clientId\": \"commerce-cli\",\n      \"publicClient\": true,\n      \"directAccessGrantsEnabled\": true,\n      \"standardFlowEnabled\": false,\n      \"protocol\": \"openid-connect\",\n      \"protocolMappers\": [\n        {\n          \"name\": \"commerce-audience\",\n          \"protocol\": \"openid-connect\",\n          \"protocolMapper\": \"oidc-audience-mapper\",\n          \"config\": {\n            \"included.custom.audience\": \"commerce-api\",\n            \"access.token.claim\": \"true\"\n          }\n        }\n      ],\n      \"defaultClientScopes\": [\n        \"profile\",\n        \"email\",\n        \"roles\"\n      ]\n    }\n  ],\n  \"users\": [\n    {\n      \"username\": \"customer\",\n      \"enabled\": true,\n      \"email\": \"customer@example.com\",\n      \"emailVerified\": true,\n      \"firstName\": \"Demo\",\n      \"lastName\": \"Customer\",\n      \"realmRoles\": [\n        \"customer\"\n      ],\n      \"credentials\": [\n        {\n          \"type\": \"password\",\n          \"value\": \"local-customer-password\",\n          \"temporary\": false\n        }\n      ]\n    },\n    {\n      \"username\": \"catalog-admin\",\n      \"enabled\": true,\n      \"email\": \"admin@example.com\",\n      \"emailVerified\": true,\n      \"firstName\": \"Demo\",\n      \"lastName\": \"Admin\",\n      \"realmRoles\": [\n        \"admin\"\n      ],\n      \"credentials\": [\n        {\n          \"type\": \"password\",\n          \"value\": \"local-catalog-password\",\n          \"temporary\": false\n        }\n      ]\n    }\n  ]\n}"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "keycloak-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "keycloak",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "keycloak"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "keycloak"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "keycloak",
+                "image": "quay.io/keycloak/keycloak:26.1.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 8080
+                  },
+                  {
+                    "containerPort": 9000
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "KC_BOOTSTRAP_ADMIN_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "commerce-local",
+                        "key": "KC_BOOTSTRAP_ADMIN_PASSWORD"
+                      }
+                    }
+                  },
+                  {
+                    "name": "KC_BOOTSTRAP_ADMIN_USERNAME",
+                    "value": "admin"
+                  },
+                  {
+                    "name": "KC_HEALTH_ENABLED",
+                    "value": "true"
+                  },
+                  {
+                    "name": "KC_HOSTNAME",
+                    "value": "http://localhost:8181"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "args": [
+                  "start-dev",
+                  "--import-realm"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "commerce-realm",
+                    "mountPath": "/opt/keycloak/data/import/commerce-realm.json",
+                    "subPath": "commerce-realm.json",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/opt/keycloak/data"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 8080
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "commerce-realm",
+                "configMap": {
+                  "name": "commerce-realm"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "keycloak-data"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 1000
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "keycloak",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "keycloak"
+        },
+        "ports": [
+          {
+            "name": "tcp-8080",
+            "port": 8080,
+            "targetPort": 8080
+          },
+          {
+            "name": "tcp-9000",
+            "port": 9000,
+            "targetPort": 9000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "mailpit",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "mailpit"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "mailpit"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "mailpit",
+                "image": "axllent/mailpit:v1.22.3",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 1025
+                  },
+                  {
+                    "containerPort": 8025
+                  }
+                ],
+                "env": [],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 1025
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "mailpit",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "mailpit"
+        },
+        "ports": [
+          {
+            "name": "tcp-1025",
+            "port": 1025,
+            "targetPort": 1025
+          },
+          {
+            "name": "tcp-8025",
+            "port": 8025,
+            "targetPort": 8025
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "mongo-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "mongodb"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "mongodb"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "mongodb",
+                "image": "mongo:7.0.16",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 27017
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "MONGO_INITDB_ROOT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "commerce-local",
+                        "key": "MONGO_INITDB_ROOT_PASSWORD"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MONGO_INITDB_ROOT_USERNAME",
+                    "value": "root"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/data/db"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 27017
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "mongo-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "mongodb",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "mongodb"
+        },
+        "ports": [
+          {
+            "name": "tcp-27017",
+            "port": 27017,
+            "targetPort": 27017
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "notification-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "notification-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "notification-db"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "notification-db"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "notification-db",
+                "image": "mysql:8.4.4",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3306
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "MYSQL_DATABASE",
+                    "value": "notification_service"
+                  },
+                  {
+                    "name": "MYSQL_PASSWORD",
+                    "value": "notifications"
+                  },
+                  {
+                    "name": "MYSQL_ROOT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "commerce-local",
+                        "key": "MYSQL_ROOT_PASSWORD"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_USER",
+                    "value": "notifications"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/mysql"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3306
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "notification-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "notification-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "notification-db"
+        },
+        "ports": [
+          {
+            "name": "tcp-3306",
+            "port": 3306,
+            "targetPort": 3306
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "order-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "order-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "order-db"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "order-db"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "order-db",
+                "image": "mysql:8.4.4",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3306
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "MYSQL_DATABASE",
+                    "value": "order_service"
+                  },
+                  {
+                    "name": "MYSQL_PASSWORD",
+                    "value": "orders"
+                  },
+                  {
+                    "name": "MYSQL_ROOT_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "name": "commerce-local",
+                        "key": "MYSQL_ROOT_PASSWORD"
+                      }
+                    }
+                  },
+                  {
+                    "name": "MYSQL_USER",
+                    "value": "orders"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/mysql"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3306
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "order-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "order-db",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "order-db"
+        },
+        "ports": [
+          {
+            "name": "tcp-3306",
+            "port": 3306,
+            "targetPort": 3306
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "schema-registry",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "schema-registry"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "schema-registry"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "schema-registry",
+                "image": "confluentinc/cp-schema-registry:7.8.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 8081
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "SCHEMA_REGISTRY_HOST_NAME",
+                    "value": "schema-registry"
+                  },
+                  {
+                    "name": "SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS",
+                    "value": "PLAINTEXT://kafka:29092"
+                  },
+                  {
+                    "name": "SCHEMA_REGISTRY_LISTENERS",
+                    "value": "http://0.0.0.0:8081"
+                  },
+                  {
+                    "name": "SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL",
+                    "value": "BACKWARD"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 8081
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "schema-registry",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "schema-registry"
+        },
+        "ports": [
+          {
+            "name": "tcp-8081",
+            "port": 8081,
+            "targetPort": 8081
+          }
+        ]
+      }
+    }
+  ]
+}

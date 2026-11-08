@@ -1,0 +1,634 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "grafana-datasources",
+        "namespace": "commerce"
+      },
+      "data": {
+        "datasources.yml": "apiVersion: 1\ndatasources:\n  - name: Prometheus\n    uid: prometheus\n    type: prometheus\n    access: proxy\n    url: http://prometheus:9090\n    isDefault: true\n  - name: Loki\n    uid: loki\n    type: loki\n    access: proxy\n    url: http://loki:3100\n  - name: Tempo\n    uid: tempo\n    type: tempo\n    access: proxy\n    url: http://tempo:3200\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "grafana-providers",
+        "namespace": "commerce"
+      },
+      "data": {
+        "dashboards.yml": "apiVersion: 1\nproviders:\n  - name: Commerce\n    type: file\n    options:\n      path: /var/lib/grafana/dashboards\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "grafana-dashboard",
+        "namespace": "commerce"
+      },
+      "data": {
+        "commerce.json": "{\n  \"title\": \"Commerce Services\",\n  \"uid\": \"commerce\",\n  \"schemaVersion\": 40,\n  \"version\": 1,\n  \"time\": {\n    \"from\": \"now-30m\",\n    \"to\": \"now\"\n  },\n  \"refresh\": \"10s\",\n  \"panels\": [\n    {\n      \"id\": 1,\n      \"type\": \"timeseries\",\n      \"title\": \"Requests per second\",\n      \"gridPos\": {\n        \"x\": 0,\n        \"y\": 0,\n        \"w\": 12,\n        \"h\": 8\n      },\n      \"datasource\": {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"sum by (application, instance) (rate(http_server_requests_seconds_count[5m]))\",\n          \"legendFormat\": \"{{instance}}\"\n        }\n      ]\n    },\n    {\n      \"id\": 2,\n      \"type\": \"timeseries\",\n      \"title\": \"HTTP 5xx per second\",\n      \"gridPos\": {\n        \"x\": 12,\n        \"y\": 0,\n        \"w\": 12,\n        \"h\": 8\n      },\n      \"datasource\": {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"sum by (instance) (rate(http_server_requests_seconds_count{status=~\\\"5..\\\"}[5m]))\",\n          \"legendFormat\": \"{{instance}}\"\n        }\n      ]\n    },\n    {\n      \"id\": 3,\n      \"type\": \"timeseries\",\n      \"title\": \"Heap used\",\n      \"gridPos\": {\n        \"x\": 0,\n        \"y\": 8,\n        \"w\": 24,\n        \"h\": 8\n      },\n      \"datasource\": {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"sum by (instance) (jvm_memory_used_bytes{area=\\\"heap\\\"})\",\n          \"legendFormat\": \"{{instance}}\"\n        }\n      ]\n    }\n  ]\n}"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "grafana-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "grafana"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "grafana"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "grafana",
+                "image": "grafana/grafana:11.6.0",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3000
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "GF_SECURITY_ADMIN_PASSWORD",
+                    "value": "local-grafana-password"
+                  },
+                  {
+                    "name": "GF_SECURITY_ADMIN_USER",
+                    "value": "admin"
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "grafana-datasources",
+                    "mountPath": "/etc/grafana/provisioning/datasources/datasources.yml",
+                    "subPath": "datasources.yml",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "grafana-providers",
+                    "mountPath": "/etc/grafana/provisioning/dashboards/dashboards.yml",
+                    "subPath": "dashboards.yml",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "grafana-dashboard",
+                    "mountPath": "/var/lib/grafana/dashboards/commerce.json",
+                    "subPath": "commerce.json",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/var/lib/grafana"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3000
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "grafana-datasources",
+                "configMap": {
+                  "name": "grafana-datasources"
+                }
+              },
+              {
+                "name": "grafana-providers",
+                "configMap": {
+                  "name": "grafana-providers"
+                }
+              },
+              {
+                "name": "grafana-dashboard",
+                "configMap": {
+                  "name": "grafana-dashboard"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "grafana-data"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 472
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "grafana"
+        },
+        "ports": [
+          {
+            "name": "tcp-3000",
+            "port": 3000,
+            "targetPort": 3000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "loki",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "loki"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "loki"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "loki",
+                "image": "grafana/loki:3.4.2",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3100
+                  }
+                ],
+                "env": [],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "args": [
+                  "-config.file=/etc/loki/local-config.yaml"
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3100
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "loki",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "loki"
+        },
+        "ports": [
+          {
+            "name": "tcp-3100",
+            "port": 3100,
+            "targetPort": 3100
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "prometheus-config",
+        "namespace": "commerce"
+      },
+      "data": {
+        "prometheus.yml": "global:\n  scrape_interval: 15s\nscrape_configs:\n  - job_name: spring-services\n    metrics_path: /actuator/prometheus\n    static_configs:\n      - targets: [product-service:8080, order-service:8081, inventory-service:8082, notification-service:8083, api-gateway:9000]\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "prometheus-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "prometheus"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "prometheus"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "prometheus",
+                "image": "prom/prometheus:v3.2.1",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 9090
+                  }
+                ],
+                "env": [],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "volumeMounts": [
+                  {
+                    "name": "prometheus-config",
+                    "mountPath": "/etc/prometheus/prometheus.yml",
+                    "subPath": "prometheus.yml",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/prometheus"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 9090
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "prometheus-config",
+                "configMap": {
+                  "name": "prometheus-config"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "prometheus-data"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 65534
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "prometheus"
+        },
+        "ports": [
+          {
+            "name": "tcp-9090",
+            "port": 9090,
+            "targetPort": 9090
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "tempo-config",
+        "namespace": "commerce"
+      },
+      "data": {
+        "tempo.yml": "server:\n  http_listen_port: 3200\ndistributor:\n  receivers:\n    otlp:\n      protocols:\n        http:\n          endpoint: 0.0.0.0:4318\nstorage:\n  trace:\n    backend: local\n    wal:\n      path: /var/tempo/wal\n    local:\n      path: /var/tempo/blocks\ncompactor:\n  compaction:\n    block_retention: 24h\n"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "tempo-data",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "tempo",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "replicas": 1,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "tempo"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "tempo"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "tempo",
+                "image": "grafana/tempo:2.7.1",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3200
+                  },
+                  {
+                    "containerPort": 4318
+                  }
+                ],
+                "env": [],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "cpu": "2",
+                    "memory": "1Gi"
+                  }
+                },
+                "args": [
+                  "-config.file=/etc/tempo.yml"
+                ],
+                "volumeMounts": [
+                  {
+                    "name": "tempo-config",
+                    "mountPath": "/etc/tempo.yml",
+                    "subPath": "tempo.yml",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "data",
+                    "mountPath": "/var/tempo"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3200
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10
+                }
+              }
+            ],
+            "volumes": [
+              {
+                "name": "tempo-config",
+                "configMap": {
+                  "name": "tempo-config"
+                }
+              },
+              {
+                "name": "data",
+                "persistentVolumeClaim": {
+                  "claimName": "tempo-data"
+                }
+              }
+            ],
+            "securityContext": {
+              "fsGroup": 10001
+            }
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "tempo",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "app": "tempo"
+        },
+        "ports": [
+          {
+            "name": "tcp-3200",
+            "port": 3200,
+            "targetPort": 3200
+          },
+          {
+            "name": "tcp-4318",
+            "port": 4318,
+            "targetPort": 4318
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "alloy-config",
+        "namespace": "commerce"
+      },
+      "data": {
+        "config.alloy": "local.file_match \"pods\" {\n  path_targets = [{\"__path__\" = \"/var/log/pods/*/*/*.log\", \"job\" = \"kubernetes-pods\"}]\n}\nloki.source.file \"pods\" {\n  targets = local.file_match.pods.targets\n  forward_to = [loki.process.cri.receiver]\n}\nloki.process \"cri\" {\n  stage.cri {}\n  forward_to = [loki.write.local.receiver]\n}\nloki.write \"local\" {\n  endpoint { url = \"http://loki:3100/loki/api/v1/push\" }\n}"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "DaemonSet",
+      "metadata": {
+        "name": "alloy",
+        "namespace": "commerce"
+      },
+      "spec": {
+        "selector": {
+          "matchLabels": {
+            "app": "alloy"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "alloy"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "alloy",
+                "image": "grafana/alloy:v1.7.4",
+                "args": [
+                  "run",
+                  "/etc/alloy/config.alloy"
+                ],
+                "securityContext": {
+                  "runAsUser": 0
+                },
+                "volumeMounts": [
+                  {
+                    "name": "logs",
+                    "mountPath": "/var/log/pods",
+                    "readOnly": true
+                  },
+                  {
+                    "name": "config",
+                    "mountPath": "/etc/alloy/config.alloy",
+                    "subPath": "config.alloy",
+                    "readOnly": true
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "logs",
+                "hostPath": {
+                  "path": "/var/log/pods",
+                  "type": "Directory"
+                }
+              },
+              {
+                "name": "config",
+                "configMap": {
+                  "name": "alloy-config"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

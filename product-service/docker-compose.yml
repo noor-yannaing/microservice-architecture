@@ -1,0 +1,9 @@
+services:
+  mongodb:
+    extends:
+      file: ../docker-compose.yml
+      service: mongodb
+networks:
+  commerce:
+volumes:
+  mongo-data:

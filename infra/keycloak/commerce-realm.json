@@ -1,0 +1,78 @@
+{
+  "realm": "commerce",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin"
+      },
+      {
+        "name": "customer"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "commerce-cli",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "protocol": "openid-connect",
+      "protocolMappers": [
+        {
+          "name": "commerce-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "commerce-api",
+            "access.token.claim": "true"
+          }
+        }
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "customer",
+      "enabled": true,
+      "email": "customer@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "realmRoles": [
+        "customer"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-customer-password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "catalog-admin",
+      "enabled": true,
+      "email": "admin@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Admin",
+      "realmRoles": [
+        "admin"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "local-catalog-password",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}
